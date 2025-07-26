@@ -1,7 +1,7 @@
 
 # EccoMamba
 
-This repository is the official implementation of EccoNet. 
+This repository is the official implementation of EccoMamba. 
 
 ## Requirements
 
@@ -18,7 +18,7 @@ You can download four processed datasets: ISIC 2018, ISIC 2017, ACDC, and Synaps
 To train the model(s) in the paper, run this command:
 
 ```train
-cd EccoNet
+cd EccoMamba
 python train.py --datasets_name <dataset name> --epochs 1000 --batch_size 36 --work_dir <output dir>
 ```
 
