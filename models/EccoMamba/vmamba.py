@@ -549,6 +549,7 @@ class VSSLayer(nn.Module):
         self.msc = MSC(dim//2)
         self.ca = ChannelAttention(dim//2)
         self.sa = SpatialAttention(3)
+
         if downsample is not None:
             self.downsample = downsample(dim=dim, norm_layer=norm_layer)
         else:
@@ -562,6 +563,7 @@ class VSSLayer(nn.Module):
         ca_out = x2*self.ca(x2)
         sa_out = ca_out*self.sa(ca_out)
         x = x + torch.cat((msc_out, sa_out), dim=3)
+        
         for blk in self.blocks:
             if self.use_checkpoint:
                 x = checkpoint.checkpoint(blk, x)
@@ -573,8 +575,6 @@ class VSSLayer(nn.Module):
 
         return x
     
-
-
 class VSSLayer_up(nn.Module):
     """ A basic Swin Transformer layer for one stage.
     Args:
@@ -761,15 +761,14 @@ class VSSM(nn.Module):
         return x, skip_list, as_list
     
     def forward_features_up(self, x, skip_list, as_list):
+
         for inx, layer_up in enumerate(self.layers_up):
             if inx == 0:
                 x = layer_up(x)
             else:
                 skip = torch.cat((skip_list[-inx], as_list[-inx]), dim=3)
                 in_ = x + skip
-                
                 x = layer_up(in_)
-
         return x
     
     def forward_final(self, x):
@@ -800,6 +799,8 @@ class MSC(nn.Module):
         **kwargs, ):
         super().__init__()
         
+        # dim是实际输入的通道数，我们需要将其分成两部分
+        self.input_dim = dim
         self.cnn_in = cnn_in = dim // 2
         self.pool_in = pool_in = dim // 2
         
@@ -883,4 +884,3 @@ class SpatialAttention(nn.Module):
         x = self.sigmoid(x)
         x = x.permute(0,2,3,1)
         return x
-    

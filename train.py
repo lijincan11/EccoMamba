@@ -4,7 +4,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 from loader import *
 import matplotlib.pyplot as plt
-from models.EccoNet.EccoNet import EccoNet
+from models.EccoMamba.EccoMamba import EccoMamba
 from engine import *
 import os
 import sys
@@ -12,7 +12,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "0" # "0, 1, 2, 3"
 from datasets.dataset import RandomGenerator
 from utils import *
 from configs.config_setting import setting_config
-from dataset_Monu import RandomGenerator_Monu,ValGenerator,ImageToImage2D,train_one_epoch_MoNu
+from dataset_Monu import RandomGenerator_Monu,ValGenerator,ImageToImage2D,train_one_epoch_MoNu,val_one_epoch_MoNu
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -102,14 +102,14 @@ def main():
                                 pin_memory=True)
         val_loader = DataLoader(val_dataset,
                                 batch_size=config.batch_size,
-                                shuffle=True,
+                                shuffle=False,
                                 worker_init_fn=worker_init_fn,
                                 num_workers=1,
                                 pin_memory=True)
     print('#----------Prepareing Models----------#')
 
     model_cfg = config.model_config
-    model = EccoNet(
+    model = EccoMamba(
         num_classes=model_cfg['num_classes'],
         input_channels=model_cfg['input_channels'],
         depths=model_cfg['depths'],
@@ -139,6 +139,7 @@ def main():
     max_dice = 0.8
     max_dsc  = 0.88
     max_iou = 0.0
+    best_epoch= -1
     if os.path.exists(resume_model):
         print('#----------Resume Model and Other params----------#')
         checkpoint = torch.load(resume_model, map_location=torch.device('cpu'))
@@ -241,8 +242,8 @@ def main():
                     max_dice = mean_dice
         elif config.datasets_name == "monuseg":
             if epoch > 50 and epoch % 20 == 0:
-                val_loss, val_dice, val_iou = train_one_epoch_MoNu(val_loader, model, criterion,
-                                            optimizer, epoch, lr_scheduler,logger,config)
+                val_loss, val_dice, val_iou = val_one_epoch_MoNu(val_loader, model, criterion, logger, config)
+                
                 if val_dice > max_dice:
                     if epoch+1 > 1:
                         logger.info('\t Saving best model, mean dice increased from: {:.4f} to {:.4f}'.format(max_dice,val_dice))

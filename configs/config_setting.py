@@ -11,7 +11,7 @@ class setting_config:
     """
     @classmethod
     def add_argument_config(cls):
-        parser = argparse.ArgumentParser(description='EccoNet')
+        parser = argparse.ArgumentParser(description='EccoMamba')
         parser.add_argument('--work_dir', type=str, default=None, help='result directory path')
         parser.add_argument('--data_path', type=str, default=None, help='data path')
         parser.add_argument('--opt', type=str, default=None, help='optimizer')
@@ -27,7 +27,7 @@ class setting_config:
 
         args.datasets_name = args.datasets_name.lower()
         if args.work_dir is None:
-            args.work_dir = '/home/ljc/source/outputs/MC-Mamba/'+ args.datasets_name + '/' +  datetime.now().strftime('%Y_%B_%d_%Hh_%Mm') + '/'
+            args.work_dir = '/home/ljc/source/outputs/EccoMamba/'+ args.datasets_name + '/' +  datetime.now().strftime('%Y_%B_%d_%Hh_%Mm') + '/'
 
         for k, v in vars(args).items():
             if v is not None:
@@ -169,15 +169,15 @@ class setting_config:
     #     'split_att': 'fc',
     #     'bridge': False,
     # }
-    network = 'vmunet'
+    # network = 'vmunet'
     model_config = {
         'num_classes': 1, 
         'input_channels': 3, 
-        # ----- MC-Mamba ----- #
+        # ----- EccoMamba ----- #
         'depths': [2,2,2,2],
         'depths_decoder': [2,2,2,1],
         'drop_path_rate': 0.2,
-        'load_ckpt_path': '/home/ljc/source/MC-UNet-mamba/pre_trained_weights/vmamba_small_e238_ema.pth',
+        'load_ckpt_path': '/home/ljc/source/EccoMamba/pre_trained_weights/vmamba_small_e238_ema.pth',
     }
 
     test_weights = ''

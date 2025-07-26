@@ -164,8 +164,6 @@ def test_one_epoch(test_loader,
 
     return np.mean(loss_list),miou,f1_or_dsc
 
-
-
 def train_one_epoch_sy_ac(train_loader,
                     model,
                     criterion, 

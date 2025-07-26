@@ -4,7 +4,7 @@ from torch.cuda.amp import autocast, GradScaler
 from torch.utils.data import DataLoader
 from loader import *
 
-from models.EccoNet.EccoNet import EccoNet
+from models.EccoMamba.EccoMamba import EccoMamba
 from engine import *
 import os
 import sys
@@ -56,7 +56,7 @@ def main():
 
     print('#----------Prepareing Models----------#')
     model_cfg = config.model_config
-    model = EccoNet(
+    model = EccoMamba(
         num_classes=model_cfg['num_classes'],
         input_channels=model_cfg['input_channels'],
         depths=model_cfg['depths'],

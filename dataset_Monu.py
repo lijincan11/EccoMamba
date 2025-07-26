@@ -129,51 +129,26 @@ class ImageToImage2D(Dataset):
     def __getitem__(self, idx):
 
         image_filename = self.images_list[idx]
-        #print(image_filename[: -3])
-        # read image
-        # print(os.path.join(self.input_path, image_filename))
-        # print(os.path.join(self.output_path, image_filename[: -3] + "png"))
-        # print(os.path.join(self.input_path, image_filename))
-        image = cv2.imread(os.path.join(self.input_path, image_filename))
-        # print("img",image_filename)
-        # print("1",image.shape)
-        image = cv2.resize(image,(self.image_size,self.image_size))
-        # print(np.max(image), np.min(image))
-        # print("2",image.shape)
-        # read mask image
-        mask = cv2.imread(os.path.join(self.output_path, image_filename[: -3] + "png"),0)
-        # print("mask",image_filename[: -3] + "png")
-        # print(np.max(mask), np.min(mask))
-        mask = cv2.resize(mask,(self.image_size,self.image_size))
-        # print(np.max(mask), np.min(mask))
-        mask[mask<=0] = 0
-        # (mask == 35).astype(int)
-        mask[mask>0] = 1
-        # print("11111",np.max(mask), np.min(mask))
 
-        # correct dimensions if needed
+        image = cv2.imread(os.path.join(self.input_path, image_filename))
+
+        image = cv2.resize(image,(self.image_size,self.image_size))
+
+        mask = cv2.imread(os.path.join(self.output_path, image_filename[: -3] + "png"),0)
+
+        mask = cv2.resize(mask,(self.image_size,self.image_size))
+        mask[mask<=0] = 0
+        mask[mask>0] = 1
+
         image, mask = correct_dims(image, mask)
-        # image, mask = tF.to_pil_image(image), tF.to_pil_image(mask)
-        # print("11",image.shape)
-        # print("22",mask.shape)
         sample = {'image': image, 'label': mask}
 
         if self.joint_transform:
             sample = self.joint_transform(sample)
-        # sample = {'image': image, 'label': mask}
-        # print("2222",np.max(mask), np.min(mask))
 
         if self.one_hot_mask:
             assert self.one_hot_mask > 0, 'one_hot_mask must be nonnegative'
             mask = torch.zeros((self.one_hot_mask, mask.shape[1], mask.shape[2])).scatter_(0, mask.long(), 1)
-        # mask = np.swapaxes(mask,2,0)
-        # print(image.shape)
-        # print("mask",mask)
-        # mask = np.transpose(mask,(2,0,1))
-        # image = np.transpose(image,(2,0,1))
-        # print(image.shape)
-        # print(mask.shape)
-        # print(sample['image'].shape)
 
         return sample, image_filename
 
@@ -299,3 +274,65 @@ def iou_on_batch(masks, pred):
         # print("rrr",np.max(mask), np.min(mask))
         ious.append(jaccard_score(mask_tmp.reshape(-1), pred_tmp.reshape(-1)))
     return np.mean(ious)
+
+def val_one_epoch_MoNu(loader, model, criterion, logger, args):
+    """
+    专门用于验证的函数，确保不更新模型参数
+    """
+    model.eval()  # 确保模型处于评估模式
+    
+    end = time.time()
+    time_sum, loss_sum = 0, 0
+    dice_sum, iou_sum = 0.0, 0.0
+
+    dices = []
+    
+    with torch.no_grad():  # 确保不计算梯度
+        for i, (sampled_batch, names) in enumerate(loader, 1):
+            try:
+                loss_name = criterion._get_name()
+            except AttributeError:
+                loss_name = criterion.__name__
+
+            # Take variable and put them to GPU
+            images, masks = sampled_batch['image'], sampled_batch['label']
+            images, masks = images.cuda(), masks.cuda()
+
+            # Forward pass only, no backpropagation
+            preds = model(images)
+            out_loss = criterion(preds, masks.float())
+
+            # Compute metrics
+            val_iou = iou_on_batch(masks, preds)
+            val_dice = criterion._show_dice(preds, masks.float())
+
+            batch_time = time.time() - end
+            dices.append(val_dice)
+
+            time_sum += len(images) * batch_time
+            loss_sum += len(images) * out_loss.item()  # 使用.item()获取标量值
+            iou_sum += len(images) * val_iou
+            dice_sum += len(images) * val_dice
+
+            if i == len(loader):
+                average_loss = loss_sum / (args.batch_size*(i-1) + len(images))
+                average_time = time_sum / (args.batch_size*(i-1) + len(images))
+                val_iou_average = iou_sum / (args.batch_size*(i-1) + len(images))
+                val_dice_avg = dice_sum / (args.batch_size*(i-1) + len(images))
+            else:
+                average_loss = loss_sum / (i * args.batch_size)
+                average_time = time_sum / (i * args.batch_size)
+                val_iou_average = iou_sum / (i * args.batch_size)
+                val_dice_avg = dice_sum / (i * args.batch_size)
+
+            end = time.time()
+            torch.cuda.empty_cache()
+
+            if i % 1 == 0:
+                print_summary(0, i, len(loader), out_loss.item(), loss_name, batch_time,
+                              average_loss, average_time, val_iou, val_iou_average,
+                              val_dice, val_dice_avg, 0, 0, 'Val', lr=0, logger=logger)
+
+            torch.cuda.empty_cache()
+
+    return average_loss, val_dice_avg, val_iou_average

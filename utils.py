@@ -12,6 +12,8 @@ import logging.handlers
 from matplotlib import pyplot as plt
 from torch.optim.optimizer import Optimizer
 from scipy.ndimage import zoom
+from scipy import ndimage
+from skimage import morphology
 import SimpleITK as sitk
 from medpy import metric
 import weakref
@@ -233,8 +235,19 @@ def get_scheduler(config, optimizer):
 
 
 def save_imgs(img, msk, msk_pred, i, save_path, datasets, threshold=0.5, test_data_name=None):
+    plt.rcParams.update({
+    'font.size': 18,           # Base font size
+    'axes.titlesize': 28,      # Title font size
+    'axes.labelsize': 32,      # X and Y labels
+    'xtick.labelsize': 28,     # X tick labels
+    'ytick.labelsize': 31,     # Y tick labels
+    'legend.fontsize': 31,     # Legend font size
+    'figure.titlesize': 36     # Figure title
+})
+    # 处理输入数据
     img = img.squeeze(0).permute(1,2,0).detach().cpu().numpy()
     img = img / 255. if img.max() > 1.1 else img
+    
     if datasets == 'retinal':
         msk = np.squeeze(msk, axis=0)
         msk_pred = np.squeeze(msk_pred, axis=0)
@@ -242,23 +255,60 @@ def save_imgs(img, msk, msk_pred, i, save_path, datasets, threshold=0.5, test_da
         msk = np.where(np.squeeze(msk, axis=0) > 0.5, 1, 0)
         msk_pred = np.where(np.squeeze(msk_pred, axis=0) > threshold, 1, 0) 
 
-    plt.figure(figsize=(7,15))
-
-    plt.subplot(3,1,1)
-    plt.imshow(img)
-    plt.axis('off')
-
-    plt.subplot(3,1,2)
-    plt.imshow(msk, cmap= 'gray')
-    plt.axis('off')
-
-    plt.subplot(3,1,3)
-    plt.imshow(msk_pred, cmap = 'gray')
-    plt.axis('off')
+    # 创建原图的副本，用于绘制边缘线条
+    img_with_edges = img.copy()
+    
+    # 确保图像是RGB格式
+    if len(img_with_edges.shape) == 2:
+        img_with_edges = np.stack([img_with_edges] * 3, axis=-1)
+    elif img_with_edges.shape[2] == 1:
+        img_with_edges = np.repeat(img_with_edges, 3, axis=2)
+    
+    # 提取边缘信息 - 使用更精确的边缘检测，生成细致的边缘线
+    # 对真实值提取边缘 - 只保留边界线
+    gt_edges = np.zeros_like(msk, dtype=bool)
+    if msk.max() > 0:
+        msk_bool = msk.astype(bool)
+        # 使用边界检测：原区域减去腐蚀后的区域
+        gt_edges = msk_bool & ~morphology.binary_erosion(msk_bool)
+        # 不进行膨胀，保持边缘线条细致，类似您提供的示例图片
+    
+    # 对预测结果提取边缘 - 只保留边界线
+    pred_edges = np.zeros_like(msk_pred, dtype=bool)
+    if msk_pred.max() > 0:
+        pred_bool = msk_pred.astype(bool)
+        # 使用边界检测：原区域减去腐蚀后的区域
+        pred_edges = pred_bool & ~morphology.binary_erosion(pred_bool)
+        # 不进行膨胀，保持边缘线条细致，类似您提供的示例图片
+    
+    # 直接在图像数组上绘制边缘线条，只显示非重叠的真实值和预测值边缘
+    # 分离重叠和非重叠的边缘
+    gt_only_edges = gt_edges & ~pred_edges  # 只有真实值的边缘
+    pred_only_edges = pred_edges & ~gt_edges  # 只有预测值的边缘
+    
+    # 真实值独有边缘用蓝色
+    if gt_only_edges.any():
+        img_with_edges[gt_only_edges, 0] = 0      # R通道设为0
+        img_with_edges[gt_only_edges, 1] = 0      # G通道设为0  
+        img_with_edges[gt_only_edges, 2] = 0.8    # B通道设为0.8（蓝色）
+    
+    # 预测值独有边缘用红色
+    if pred_only_edges.any():
+        img_with_edges[pred_only_edges, 0] = 0.8  # R通道设为0.8（红色）
+        img_with_edges[pred_only_edges, 1] = 0    # G通道设为0
+        img_with_edges[pred_only_edges, 2] = 0    # B通道设为0
+    
+    # 创建图形
+    fig, ax = plt.subplots(figsize=(10, 10))
+    
+    # 显示带有边缘线条的图像
+    ax.imshow(img_with_edges)
+    ax.axis('off')
 
     if test_data_name is not None:
         save_path = save_path + test_data_name + '_'
-    plt.savefig(save_path + str(i) +'.png')
+    
+    plt.savefig(save_path + str(i) + '_edge_visualization.png', bbox_inches='tight', dpi=150)
     plt.close()
     
 
@@ -781,7 +831,7 @@ def calculate_metric_percase(pred, gt):
 def test_single_volume(image, label, net, classes, patch_size=[256, 256], 
                     test_save_path=None, case=None, z_spacing=1, val_or_test=False):
     image, label = image.squeeze(0).cpu().detach().numpy(), label.squeeze(0).cpu().detach().numpy()
-    grad_cam = GradCAM(net, target_layers=[net.module.EccoNet.layers[0].sa.conv1])  # Confirm this is the correct layer for 
+    grad_cam = GradCAM(net, target_layers=[net.module.EccoMamba.layers[0].sa.conv1])  # Confirm this is the correct layer for 
     if len(image.shape) == 3:
         prediction = np.zeros_like(label)
         for ind in range(image.shape[0]):
@@ -810,14 +860,14 @@ def test_single_volume(image, label, net, classes, patch_size=[256, 256],
                 else:
                     pred = out_np
                 prediction[ind] = pred
+                # 注意力热图代码
+                # grayscale_cam = grad_cam(input_tensor=input_tensor, target_category=mode_class)
+                # grayscale_cam = grayscale_cam[0, :]
 
-                grayscale_cam = grad_cam(input_tensor=input_tensor, target_category=mode_class)
-                grayscale_cam = grayscale_cam[0, :]
+                # os.makedirs(test_save_path, exist_ok=True)
 
-                os.makedirs(test_save_path, exist_ok=True)
-
-                slice_save_path = os.path.join(test_save_path, f"{case}_slice_{ind}_grad_cam_overlay.jpg")
-                save_cam_heatmap(slice, grayscale_cam, slice_save_path)  # 使用原始切片作为背景
+                # slice_save_path = os.path.join(test_save_path, f"{case}_slice_{ind}_grad_cam_overlay.jpg")
+                # save_cam_heatmap(slice, grayscale_cam, slice_save_path)  # 使用原始切片作为背景
     else:
         input_tensor = torch.from_numpy(image).unsqueeze(0).unsqueeze(0).float().cuda()
         net.eval()
