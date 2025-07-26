@@ -1,5 +1,5 @@
 
-# EccoNet
+# EccoMamba
 
 This repository is the official implementation of EccoNet. 
 
@@ -11,7 +11,7 @@ To install requirements:
 pip install -r requirements.txt
 ```
 ## DataSet
-You can download four processed datasets: ACDC, Synapse, ISIC 2018, ISIC 2017 and MoNuSeg 2018. [click this](https://zenodo.org/records/14626096)
+You can download four processed datasets: ISIC 2018, ISIC 2017, ACDC, and Synapse. [click this](https://zenodo.org/records/14626096)
 
 ## Training
 
@@ -25,7 +25,7 @@ python train.py --datasets_name <dataset name> --epochs 1000 --batch_size 36 --w
 
 ## Evaluation
 
-You can download the best weights files for five datasets for verification here.[click this](https://zenodo.org/records/14626096)
+You can download the best weights files for the four datasets for verification here.[click this](https://zenodo.org/records/14626096)
 
 To evaluate my model, run:
 ```eval
